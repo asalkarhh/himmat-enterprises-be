@@ -79,6 +79,14 @@ public class SalesInvoiceLine {
     private BigDecimal lineTotal;
 
     @Builder.Default
+    @Column(name = "returned_quantity", nullable = false)
+    private Integer returnedQuantity = 0;
+
+    @Builder.Default
+    @Column(name = "is_active_in_current_revision", nullable = false)
+    private boolean isActiveInCurrentRevision = true;
+
+    @Builder.Default
     @Column(name = "is_price_overridden", nullable = false)
     private boolean isPriceOverridden = false;
 
@@ -104,4 +112,10 @@ public class SalesInvoiceLine {
     @Builder.Default
     @Column(name = "cost_available", nullable = false)
     private boolean costAvailable = false;
+
+    public int getRemainingReturnableQuantity() {
+        int q = quantity != null ? quantity : 0;
+        int r = returnedQuantity != null ? returnedQuantity : 0;
+        return Math.max(0, q - r);
+    }
 }

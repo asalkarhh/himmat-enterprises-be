@@ -26,6 +26,9 @@ public class InvoiceLineDto {
     private String discountSource;
     private BigDecimal unitNetPrice;
     private BigDecimal lineTotal;
+    private Integer returnedQuantity;
+    private Integer remainingReturnableQuantity;
+    private boolean isActiveInCurrentRevision;
     private boolean isPriceOverridden;
     private String overrideReason;
     private BigDecimal gstRatePct;

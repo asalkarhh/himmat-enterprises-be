@@ -38,6 +38,10 @@ public class InvoiceResponseDto {
     private BigDecimal totalTaxableAmount;
     private BigDecimal totalGstAmount;
     private BigDecimal totalPayableAmount;
+    private BigDecimal originalPayableAmount;
+    private BigDecimal totalReturnedAmount;
+    private BigDecimal effectivePayableAmount;
+    private Integer revisionCount;
     private BigDecimal totalAllocatedAmount;
     private BigDecimal outstandingAmount;
     private boolean taxBreakdownAvailable;

@@ -30,7 +30,7 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     @Query("SELECT si FROM SalesInvoice si WHERE si.id = :id")
     Optional<SalesInvoice> findByIdWithLock(@Param("id") Long id);
 
-    @Query("SELECT si FROM SalesInvoice si WHERE si.customer.id = :customerId AND si.status = 'POSTED' AND si.totalPayableAmount > si.totalAllocatedAmount ORDER BY si.invoiceDate ASC, si.id ASC")
+    @Query("SELECT si FROM SalesInvoice si WHERE si.customer.id = :customerId AND si.status = 'POSTED' AND (si.totalPayableAmount - si.totalReturnedAmount) > si.totalAllocatedAmount ORDER BY si.invoiceDate ASC, si.id ASC")
     List<SalesInvoice> findUnpaidInvoicesByCustomer(@Param("customerId") Long customerId);
 
     @Query("SELECT si FROM SalesInvoice si WHERE " +
@@ -41,7 +41,7 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
            "(:displayFormat IS NULL OR si.displayFormat = :displayFormat) AND " +
            "(cast(:startDate as date) IS NULL OR si.invoiceDate >= :startDate) AND " +
            "(cast(:endDate as date) IS NULL OR si.invoiceDate <= :endDate) AND " +
-           "(:overdueOnly IS NULL OR :overdueOnly = FALSE OR (si.status = 'POSTED' AND si.totalPayableAmount > si.totalAllocatedAmount AND si.dueDate < :currentDate)) AND " +
+           "(:overdueOnly IS NULL OR :overdueOnly = FALSE OR (si.status = 'POSTED' AND (si.totalPayableAmount - si.totalReturnedAmount) > si.totalAllocatedAmount AND si.dueDate < :currentDate)) AND " +
            "(cast(:search as string) IS NULL OR " +
            "LOWER(si.invoiceNumber) LIKE LOWER(CONCAT('%', cast(:search as string), '%')) OR " +
            "LOWER(si.customerName) LIKE LOWER(CONCAT('%', cast(:search as string), '%')))")
@@ -58,7 +58,7 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
                                       Pageable pageable);
 
     @Query("SELECT si FROM SalesInvoice si WHERE " +
-           "si.status = 'POSTED' AND si.totalPayableAmount > si.totalAllocatedAmount AND " +
+           "si.status = 'POSTED' AND (si.totalPayableAmount - si.totalReturnedAmount) > si.totalAllocatedAmount AND " +
            "(:customerId IS NULL OR si.customer.id = :customerId) AND " +
            "(:siteId IS NULL OR (si.customerSite IS NOT NULL AND si.customerSite.id = :siteId)) AND " +
            "(cast(:dueStartDate as date) IS NULL OR si.dueDate >= :dueStartDate) AND " +
@@ -73,7 +73,7 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
                                          Pageable pageable);
 
     @Query("SELECT si FROM SalesInvoice si WHERE " +
-           "si.status = 'POSTED' AND si.totalPayableAmount > si.totalAllocatedAmount AND " +
+           "si.status = 'POSTED' AND (si.totalPayableAmount - si.totalReturnedAmount) > si.totalAllocatedAmount AND " +
            "(:customerId IS NULL OR si.customer.id = :customerId) AND " +
            "(:siteId IS NULL OR (si.customerSite IS NOT NULL AND si.customerSite.id = :siteId)) AND " +
            "(cast(:dueStartDate as date) IS NULL OR si.dueDate >= :dueStartDate) AND " +

@@ -215,3 +215,47 @@ The frontend inherits the admin interface design established in BE01:
   * Metrics: Total Invoiced, Total Receipts, Total Returned, Total Refunded, Unallocated Advance Credit, Outstanding Dues.
 * **Ledger Statement**:
   * Opening Balance $\rightarrow$ Chronological entries with signed amounts and running balances $\rightarrow$ Closing Balance.
+
+---
+
+## 7. Bill Corrections, Returns & Refunds (BE06)
+
+### 7.1 Invoice Revision Modal (`/invoices/:id/revise`)
+* **Header Form**:
+  * Revision Reason input (mandatory textarea).
+  * Concurrency guard: sends `expectedVersion` to prevent overwriting concurrent updates.
+* **Line Item Table**:
+  * Displays existing invoice lines with quantity, net unit price, and line total.
+  * Allows increasing quantity (triggers additional stock deduction warning), decreasing quantity (restores stock differences), or setting to 0 / removing line.
+  * Validation: Prevents reducing line quantity below already returned quantity (`returnedQuantity`).
+  * Price overrides: Optional unit price override with mandatory reason.
+* **Preview Diff Pane**:
+  * Displays: Previous Total Payable, New Total Payable, Delta Payable (green for decrease, red for increase).
+  * Released Allocation Warning: If invoice was paid/partially paid, highlights amount that will be automatically returned to customer receipt credit.
+* **Submission**:
+  * "Apply Invoice Revision" (`POST /api/v1/invoices/:id/revisions`, with `Idempotency-Key`).
+
+### 7.2 Customer Return Flow (`/invoices/:id/return`)
+* **Return Form**:
+  * Return Date picker (defaults to today; past/future returns permitted).
+  * Return Reason textarea.
+  * Valuation Policy Selector: Rendered if any line underwent price revisions (`"Original Invoice Price"` vs `"Latest Revised Price"`).
+* **Return Items Selector**:
+  * Shows each invoice line, original quantity, already returned quantity, and maximum returnable quantity.
+  * Input for `returnQuantity` ($1 \le qty \le remaining$).
+  * Displays unit refund price based on resolved valuation policy and calculated refund total.
+* **Financial Impact Callout**:
+  * For unpaid invoices: "Reduces outstanding customer balance by ₹X".
+  * For paid invoices: "Releases ₹X to customer unallocated advance credit".
+* **Submission**:
+  * "Process Customer Return" (`POST /api/v1/invoices/:id/returns`, with `Idempotency-Key`).
+
+### 7.3 Customer Refund Modal (`/customers/:id/refund`)
+* **Available Credit Banner**:
+  * Displays available customer advance credit (sum of unallocated receipts and negative ledger balance).
+* **Disbursement Form**:
+  * Refund Amount: Currency input ($\le$ available customer credit).
+  * Split Component Rows: Multi-row split between `CASH` and `ONLINE` (with UPI/bank transaction reference).
+  * Reason textarea.
+* **Submission**:
+  * "Disburse Refund" (`POST /api/v1/customers/:id/refunds`, with `Idempotency-Key`). Updates customer balance to ₹0.00.

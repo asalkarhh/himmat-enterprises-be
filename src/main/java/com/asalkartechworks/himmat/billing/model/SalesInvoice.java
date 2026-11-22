@@ -109,6 +109,17 @@ public class SalesInvoice {
     @Column(name = "total_payable_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal totalPayableAmount;
 
+    @Column(name = "original_payable_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal originalPayableAmount;
+
+    @Builder.Default
+    @Column(name = "total_returned_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal totalReturnedAmount = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "revision_count", nullable = false)
+    private Integer revisionCount = 0;
+
     @Builder.Default
     @Column(name = "total_allocated_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
@@ -153,8 +164,26 @@ public class SalesInvoice {
         line.setInvoice(this);
     }
 
+    public BigDecimal getEffectivePayableAmount() {
+        BigDecimal returned = totalReturnedAmount != null ? totalReturnedAmount : BigDecimal.ZERO;
+        return totalPayableAmount.subtract(returned).max(BigDecimal.ZERO);
+    }
+
     public BigDecimal getOutstandingAmount() {
         BigDecimal allocated = totalAllocatedAmount != null ? totalAllocatedAmount : BigDecimal.ZERO;
-        return totalPayableAmount.subtract(allocated).max(BigDecimal.ZERO);
+        return getEffectivePayableAmount().subtract(allocated).max(BigDecimal.ZERO);
+    }
+
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (originalPayableAmount == null && totalPayableAmount != null) {
+            originalPayableAmount = totalPayableAmount;
+        }
+        if (totalReturnedAmount == null) {
+            totalReturnedAmount = BigDecimal.ZERO;
+        }
+        if (revisionCount == null) {
+            revisionCount = 0;
+        }
     }
 }

@@ -49,4 +49,12 @@ public final class MoneyPolicy {
     public static boolean isNonNegative(BigDecimal amount) {
         return amount != null && amount.compareTo(BigDecimal.ZERO) >= 0;
     }
+
+    public static BigDecimal computeTaxableFromInclusive(BigDecimal lineTotal, BigDecimal gstRatePct) {
+        if (lineTotal == null || gstRatePct == null) {
+            return null;
+        }
+        BigDecimal taxMultiplier = BigDecimal.ONE.add(gstRatePct.divide(BigDecimal.valueOf(100), 10, DEFAULT_ROUNDING));
+        return roundMoney(lineTotal.divide(taxMultiplier, MONEY_SCALE, DEFAULT_ROUNDING));
+    }
 }

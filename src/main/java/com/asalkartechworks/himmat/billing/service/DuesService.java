@@ -60,9 +60,7 @@ public class DuesService {
         long overdueCount = 0;
 
         for (SalesInvoice si : invoices) {
-            BigDecimal outstanding = si.getTotalPayableAmount().subtract(
-                    si.getTotalAllocatedAmount() != null ? si.getTotalAllocatedAmount() : BigDecimal.ZERO
-            );
+            BigDecimal outstanding = si.getOutstandingAmount();
 
             if (outstanding.compareTo(BigDecimal.ZERO) > 0) {
                 totalOutstanding = totalOutstanding.add(outstanding);
@@ -84,11 +82,7 @@ public class DuesService {
     }
 
     private DueInvoiceDto toDueInvoiceDto(SalesInvoice si, LocalDate today) {
-        BigDecimal outstanding = MoneyPolicy.roundMoney(
-                si.getTotalPayableAmount().subtract(
-                        si.getTotalAllocatedAmount() != null ? si.getTotalAllocatedAmount() : BigDecimal.ZERO
-                )
-        );
+        BigDecimal outstanding = MoneyPolicy.roundMoney(si.getOutstandingAmount());
 
         boolean isOverdue = today.isAfter(si.getDueDate());
         long daysOverdue = isOverdue ? ChronoUnit.DAYS.between(si.getDueDate(), today) : 0;

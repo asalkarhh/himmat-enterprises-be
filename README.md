@@ -51,6 +51,18 @@ A resilient, transaction-safe backend modular monolith for Himmat Enterprises (p
     * Positive (+) = Customer owes shop (Receivable / Charge)
     * Negative (-) = Shop owes customer or customer holds advance (Receipt / Credit)
   * Customer account summaries and statement with opening/closing balances across date ranges.
+* **BE06: Bill Revisions, Customer Returns & Customer Refunds** (Complete)
+  * Authoritative versioned bill corrections (`sales_invoice_revision`) preserving original invoice identity, invoice number, invoice date, and due date.
+  * Line modifications, additions, and removals with stock delta postings:
+    * Delta > 0: stock OUT (`SALE`).
+    * Delta < 0: stock IN (`REVERSAL`).
+    * Delta = 0: 0 stock movement.
+  * Releasing excess payment allocations back to customer receipts when payable is reduced below allocated payments.
+  * Customer returns accepted at any time without arbitrary age restrictions.
+  * Returns enforce remaining returnable piece limits ($quantity - returnedQuantity$).
+  * Explicit valuation policy handling: historical price-edited lines require explicit policy (`ORIGINAL_INVOICE_PRICE` vs `LATEST_REVISED_PRICE`).
+  * Customer refunds disburse unallocated customer advance credit via CASH/ONLINE without touching stock.
+  * Full customer ledger reconciliation: Invoices (+), Receipts (-), Returns (-), Refunds (+).
 
 ---
 
@@ -98,6 +110,30 @@ A resilient, transaction-safe backend modular monolith for Himmat Enterprises (p
 ### Customer Receipts, Dues & Ledger (BE05)
 | Method | Path | Description | Access |
 |---|---|---|---|
+| `POST` | `/api/v1/customers/{id}/receipts` | Record customer receipt (CASH, ONLINE) & allocate | Owner, Manager |
+| `GET` | `/api/v1/customers/{id}/receipts` | List receipts for customer | Owner, Manager |
+| `POST` | `/api/v1/customers/{id}/allocations` | Apply unallocated customer credit to invoices | Owner, Manager |
+| `GET` | `/api/v1/dues` | Search unpaid invoices with overdue filters | Owner, Manager |
+| `GET` | `/api/v1/dues/summary` | Get outstanding & overdue KPI aggregates | Owner, Manager |
+| `GET` | `/api/v1/customers/{id}/account-summary` | Get customer financial summary | Owner, Manager |
+| `GET` | `/api/v1/customers/{id}/ledger` | Get customer ledger statement with date filtering | Owner, Manager |
+
+### Invoice Revisions, Returns & Refunds (BE06)
+| Method | Path | Description | Access |
+|---|---|---|---|
+| `POST` | `/api/v1/invoices/{id}/revisions/preview` | Preview line differences, new totals, and released allocation | Owner, Manager |
+| `POST` | `/api/v1/invoices/{id}/revisions` | Apply authoritative versioned revision to sales invoice | Owner, Manager |
+| `GET` | `/api/v1/invoices/{id}/revisions` | List historical revision snapshots for invoice | Owner, Manager |
+| `GET` | `/api/v1/invoices/{id}/revisions/{revId}` | Get specific revision details and snapshot payload | Owner, Manager |
+| `POST` | `/api/v1/invoices/{id}/returns/preview` | Preview return valuation, amounts, and released allocation | Owner, Manager |
+| `POST` | `/api/v1/invoices/{id}/returns` | Process customer return, restore stock, post ledger credit | Owner, Manager |
+| `GET` | `/api/v1/invoices/{id}/returns` | List customer returns for invoice | Owner, Manager |
+| `GET` | `/api/v1/customer-returns/{id}` | Get customer return details by ID | Owner, Manager |
+| `GET` | `/api/v1/customer-returns` | Search customer returns across customers & dates | Owner, Manager |
+| `POST` | `/api/v1/customers/{id}/refunds` | Disburse refund from unallocated customer credit (CASH/ONLINE) | Owner, Manager |
+| `GET` | `/api/v1/customers/{id}/refunds` | List customer refunds for customer | Owner, Manager |
+| `GET` | `/api/v1/customer-refunds/{id}` | Get customer refund details by ID | Owner, Manager |
+| `GET` | `/api/v1/customer-refunds` | Search all customer refunds across dates | Owner, Manager |
 | `POST` | `/api/v1/customers/{id}/receipts` | Record customer receipt (CASH, ONLINE) & allocate | Owner, Manager |
 | `GET` | `/api/v1/customers/{id}/receipts` | List receipts for specific customer | Owner, Manager |
 | `GET` | `/api/v1/customer-receipts/{id}` | Get customer receipt details | Owner, Manager |

@@ -92,7 +92,7 @@ public class CustomerLedgerService {
         // Sum outstanding dues from unpaid posted invoices
         List<SalesInvoice> unpaidInvoices = salesInvoiceRepository.findUnpaidInvoicesByCustomer(customerId);
         BigDecimal outstandingDues = unpaidInvoices.stream()
-                .map(si -> si.getTotalPayableAmount().subtract(si.getTotalAllocatedAmount()))
+                .map(SalesInvoice::getOutstandingAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return CustomerAccountSummaryDto.builder()

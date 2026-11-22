@@ -209,17 +209,63 @@ The customer ledger uses an explicit, unambiguous signed financial model:
 
 ---
 
-## 8. Integration Contract for BE06 (Bill Revisions, Customer Returns & Refunds)
+## 8. Versioned Bill Revisions, Customer Returns & Refunds (BE06)
 
-BE06 builds directly on the BE05 sales invoice and customer receipt foundation:
-1. **Bill Revisions**:
-   * If bill items are revised, reversal movement (`StockMovementType.REVERSAL` or adjustment) restores original stock and applies new line stock.
-   * Difference in invoice total updates customer ledger.
-2. **Customer Returns**:
-   * `StockMovementType.CUSTOMER_RETURN`, `direction = IN`, `sourceEntityType = "CUSTOMER_RETURN"`.
-   * `allowInactiveVariants = true` to allow returning discontinued items originally sold on that invoice.
-   * Customer ledger entry: `sourceType = CUSTOMER_RETURN`, `amount = -returnAmount` (reduces customer debt or creates advance credit).
-   * Excess allocations are released back to receipt credit if return reduces invoice payable below allocated amount.
-3. **Customer Refunds**:
-   * Payout of cash/bank to customer from unallocated customer advance credit.
-   * Customer ledger entry: `sourceType = REFUND`, `amount = +refundAmount`.
+BE06 establishes authoritative versioned corrections, customer returns, customer refunds, and comprehensive ledger/stock/allocation reconciliation.
+
+### 8.1 Database Extensions (Flyway V7)
+* `sales_invoice`: Added `original_payable_amount` (backfilled, NOT NULL), `total_returned_amount` (DEFAULT 0.00), `revision_count` (DEFAULT 0).
+* `sales_invoice_line`: Added `returned_quantity` (DEFAULT 0), `is_active_in_current_revision` (DEFAULT TRUE), and check constraint `chk_sales_line_returned CHECK (returned_quantity >= 0 AND returned_quantity <= quantity)`.
+* `sales_invoice_revision`: Versioned snapshot header tracking previous vs new totals, delta payable, released allocations, and full JSON payload snapshot.
+* `sales_invoice_revision_line`: Line-level revision audit detail tracking previous vs new quantities, net prices, line totals, deltas, and change types (`UNCHANGED`, `MODIFIED`, `ADDED`, `REMOVED`).
+* `customer_return` & `customer_return_line`: Return records tracking returned quantities, unit price, valuation basis, and tax breakdowns. Numbered sequentially (`CR-%05d`).
+* `customer_refund`, `customer_refund_component`, `customer_refund_source`: Disbursement of unallocated customer advance credit via CASH or ONLINE payment methods, tracing back to source customer receipts. Numbered sequentially (`CRF-%05d`).
+
+### 8.2 Invoice Revisions
+* **Identity Preservation**: Original `invoiceNumber`, `invoiceDate`, and `dueDate` (`invoiceDate + 30 days`) are strictly preserved.
+* **Customer Immutability**: Cross-customer invoice reassignment is prohibited.
+* **Stock Delta Effects**:
+  * Positive delta ($newQty > oldQty$): Deducts additional stock (`StockMovementType.SALE`, `direction = OUT`, variant must be active).
+  * Negative delta ($newQty < oldQty$): Restores stock to inventory (`StockMovementType.REVERSAL`, `direction = IN`, allows historical/deactivated variants).
+  * Zero delta (price-only correction): 0 stock movements.
+  * Line quantity cannot be reduced below already returned items ($newQty \ge returnedQuantity$).
+* **Financial & Excess Allocation Release**:
+  * Effective payable: $effectivePayable = totalPayableAmount - totalReturnedAmount$.
+  * If revision reduces payable below already allocated payments, excess allocation is released back to `CustomerReceipt.unallocatedAmount` in reverse order (`id DESC`).
+  * Ledger entry posted with signed amount = `deltaPayableAmount`.
+
+### 8.3 Customer Returns & Valuation Policy
+* **Age Invariance**: Returns are accepted legitimately after a month or longer without arbitrary time limits.
+* **Non-Negative Invariant**: Returned quantity cannot exceed remaining returnable quantity ($quantity - returnedQuantity$).
+* **Stock Inward**: Stock is restored to inventory (`StockMovementType.CUSTOMER_RETURN`, `direction = IN`, `allowInactiveVariants = true`).
+* **Valuation Basis Rules**:
+  * *Unambiguous (Not Price-Revised)*: Return valued at original line price: `valuationBasis = "ORIGINAL_INVOICE_PRICE"`, unit price = `line.unitNetPrice`.
+  * *Ambiguous (Historical Price Revision)*: If a line underwent price revisions, returns without explicit policy fail with `422 RETURN_VALUATION_POLICY_REQUIRED`. When provided with `"ORIGINAL_INVOICE_PRICE"` or `"LATEST_REVISED_PRICE"`, unit price is snapshotted accordingly.
+  * Catalog prices are NEVER used to value historical customer returns.
+* **Customer Ledger**: Posted as `sourceType = CUSTOMER_RETURN`, `amount = -totalReturnAmount` (credit to customer).
+* **Allocation Release**: Excess allocations released back to receipt credit if return reduces effective payable below allocated amount.
+
+### 8.4 Customer Refunds
+* **Advance Credit Payout**: Disburses unallocated customer advance credit via CASH, ONLINE, or mixed split.
+* **Zero Stock Impact**: Refunds are purely monetary disbursements and do not touch stock.
+* **Source Tracking**: Deducts from unallocated customer receipts and logs `CustomerRefundSource` records.
+* **Customer Ledger**: Posted as `sourceType = REFUND`, `amount = +totalAmount` (increases running balance towards 0.00).
+
+### 8.5 Ledger Reconciliation Example
+$$\begin{array}{lcccc}
+\textbf{Transaction} & \textbf{Type} & \textbf{Amount} & \textbf{Running Balance} & \textbf{Effective Shop Due} \\
+\hline
+\text{Initial Bill} & \text{INVOICE} & +1,000.00 & +1,000.00 & \text{Customer owes ₹1,000} \\
+\text{Payment} & \text{RECEIPT} & -600.00 & +400.00 & \text{Customer owes ₹400} \\
+\text{Return} & \text{CUSTOMER\_RETURN} & -500.00 & -100.00 & \text{Shop holds ₹100 credit} \\
+\text{Disbursement} & \text{REFUND} & +100.00 & 0.00 & \text{Reconciled to ₹0.00}
+\end{array}$$
+
+---
+
+## 9. Integration Contract for BE07 (Expenses & Financial Reports)
+
+BE07 builds upon the completed ledger, purchase, and billing foundations:
+1. Operational expenses (rent, utilities, salaries, maintenance).
+2. Profit and loss accounting combining sales revenue, COGS (purchase costs), returns, discounts, and expenses.
+3. Daily counter cash-register reconciliation (opening float, cash sales, cash receipts, cash purchase payments, cash refunds, cash expenses, closing balance).
