@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: himmat_postgres
+    environment:
+      POSTGRES_DB: himmat_dev
+      POSTGRES_USER: himmat_user
+      POSTGRES_PASSWORD: himmat_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - himmat_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U himmat_user -d himmat_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  himmat_pgdata:

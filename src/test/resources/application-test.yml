@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_TEST_URL:jdbc:postgresql://localhost:5432/himmat_test}
+    username: ${SPRING_DATASOURCE_TEST_USERNAME:saurabhasalkar}
+    password: ${SPRING_DATASOURCE_TEST_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+  flyway:
+    enabled: true
+    clean-disabled: false
+
+app:
+  security:
+    jwt:
+      secret: "himmat-enterprises-test-jwt-secret-key-32-chars-long-or-more!"
+      expiration-seconds: 1800
+      issuer: himmat-enterprises
+      audience: himmat-app
+    throttle:
+      max-attempts: 5
+      window-minutes: 15
+  bootstrap:
+    enabled: false
+  cors:
+    allowed-origins: http://localhost:5173
+    allow-credentials: false

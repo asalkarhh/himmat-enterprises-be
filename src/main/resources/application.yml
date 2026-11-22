@@ -1,0 +1,82 @@
+spring:
+  application:
+    name: himmat-enterprises-backend
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/himmat_dev}
+    username: ${SPRING_DATASOURCE_USERNAME:saurabhasalkar}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 25
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
+
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+    default-property-inclusion: non_null
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_HEALTH_SHOW_DETAILS:never}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: ${APP_DOCS_ENABLED:true}
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${APP_DOCS_ENABLED:true}
+    operations-sorter: method
+
+app:
+  security:
+    jwt:
+      secret: ${APP_SECURITY_JWT_SECRET:}
+      expiration-seconds: ${APP_SECURITY_JWT_EXPIRATION_SECONDS:1800}
+      issuer: ${APP_SECURITY_JWT_ISSUER:himmat-enterprises}
+      audience: ${APP_SECURITY_JWT_AUDIENCE:himmat-app}
+    throttle:
+      max-attempts: ${APP_SECURITY_THROTTLE_MAX_ATTEMPTS:5}
+      window-minutes: ${APP_SECURITY_THROTTLE_WINDOW_MINUTES:15}
+  bootstrap:
+    enabled: ${APP_BOOTSTRAP_ENABLED:false}
+    username: ${APP_BOOTSTRAP_USERNAME:}
+    display-name: ${APP_BOOTSTRAP_DISPLAY_NAME:}
+    password: ${APP_BOOTSTRAP_PASSWORD:}
+    shop-name: ${APP_BOOTSTRAP_SHOP_NAME:Himmat Enterprises}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+    allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+    allowed-headers: Authorization,Content-Type,X-Request-Id,Idempotency-Key
+    allow-credentials: false

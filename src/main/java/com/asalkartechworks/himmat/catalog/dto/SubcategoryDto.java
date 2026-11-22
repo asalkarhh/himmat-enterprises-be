@@ -1,0 +1,23 @@
+package com.asalkartechworks.himmat.catalog.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class SubcategoryDto {
+    private Long id;
+    private Long categoryId;
+    private String categoryName;
+    private String name;
+    private boolean isActive;
+    private Long version;
+    private Instant createdAt;
+    private Instant updatedAt;
+}
