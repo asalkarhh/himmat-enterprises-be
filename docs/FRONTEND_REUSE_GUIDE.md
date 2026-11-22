@@ -163,3 +163,55 @@ The frontend inherits the admin interface design established in BE01:
 | `GET` | `/api/v1/inventory/movements` | List immutable movements | `variantId`, `movementType`, `direction`, `sourceEntityType`, `businessEventId`, `fromDate`, `toDate`, `page`, `size` |
 | `GET` | `/api/v1/inventory/variants/{variantId}/movements` | Scoped variant movements | `variantId` (path), `movementType`, `direction`, `fromDate`, `toDate`, `page`, `size` |
 | `POST` | `/api/v1/inventory/adjustments` | Perform manual adjustments | Body: `{ reason, lines: [{ variantId, direction, quantity, expectedVersion }] }`, Header: `Idempotency-Key` |
+
+---
+
+## 6. Customer Billing, Invoices, Receipts, Advances & Dues UI (BE05)
+
+### 6.1 Create Customer Invoice Screen (`/invoices/new`)
+* **Header Form**:
+  * **Customer Selector**: Autocomplete with code, name, phone, current balance badge.
+  * **Customer Site Selector**: Filtered to sites owned by selected customer; optional for over-the-counter sales.
+  * **Invoice Date**: Defaults to today (rejects future dates).
+  * **Display Format Toggle**: `NORMAL` vs `GST`. Displays helper note: *Both formats have the exact same payable total; GST format itemizes tax breakdown.*
+  * **Notes**: Optional remarks.
+* **Line Item Table**:
+  * **Variant Selector**: Search by product name, SKU, or size label.
+  * **Quantity**: Integer piece input $\ge 1$.
+  * **Unit Price**: Auto-populated based on pricing method (MRP minus category discount, Cost-Plus, or Fixed). User override supported with required reason.
+  * **Discount %**: Auto-populated from category sales discount, overridable.
+  * **Computed Columns**: Unit Net Price, Line Total, GST Rate %, Taxable Amount, Tax Amount.
+* **Live Calculation & Preview (`POST /api/v1/invoices/preview`)**:
+  * Debounced preview call as lines change.
+  * Displays: Gross Total, Total Discount, Taxable Amount, Total GST, Total Payable.
+  * Surfaces warning if GST rates are missing on any line.
+  * Captures `pricingFingerprint` to send on final invoice creation.
+* **Payment & Settlement Options**:
+  * **Immediate Payment**: Optional split CASH/ONLINE section to record receipt upon bill generation.
+  * **Apply Available Advance**: Checkbox showing available unallocated customer credit with input amount.
+* **Submission**:
+  * Calls `POST /api/v1/invoices` with `Idempotency-Key`.
+
+### 6.2 Invoice List & Aging Dashboard (`/invoices`)
+* **Filters**: Customer, Site, Status (`POSTED`, `CANCELLED`), Settlement Status (`UNPAID`, `PARTIALLY_PAID`, `PAID`), Display Format, Date Range, Overdue Only toggle, Search.
+* **Columns**: Invoice #, Date, Customer & Site, Total Payable, Allocated Amount, Outstanding, Status, Settlement Badge, Overdue Tag, Actions.
+* **Overdue Badge**: When `isOverdue: true`, renders red warning tag: `"Overdue by X days"`.
+
+### 6.3 Customer Receipts Modal (`/customers/:id/receipts`)
+* **Components Split**: Multi-row CASH and ONLINE inputs with reference ID.
+* **Allocations Section**: Lists unpaid posted invoices for this customer. User can allocate amounts to specific bills.
+* Unallocated excess automatically saved as "Customer Advance Credit".
+
+### 6.4 Customer Dues & Aging Dashboard (`/dues`)
+* **KPI Summary Cards**:
+  * Total Outstanding Amount across all unpaid posted invoices.
+  * Total Overdue Amount across invoices past their 30-day due date.
+  * Outstanding Invoice Count & Overdue Invoice Count.
+* **Aging Table**: List of due invoices ordered by due date ascending, highlighting overdue bills.
+
+### 6.5 Customer Ledger & Account Summary (`/customers/:id/ledger`)
+* **Account Summary Card**:
+  * Current Balance (`+₹X` = Customer owes shop, `-₹X` = Customer advance).
+  * Metrics: Total Invoiced, Total Receipts, Total Returned, Total Refunded, Unallocated Advance Credit, Outstanding Dues.
+* **Ledger Statement**:
+  * Opening Balance $\rightarrow$ Chronological entries with signed amounts and running balances $\rightarrow$ Closing Balance.

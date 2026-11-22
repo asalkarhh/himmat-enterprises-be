@@ -2,9 +2,11 @@ package com.asalkartechworks.himmat.party.repository;
 
 import com.asalkartechworks.himmat.party.model.Customer;
 import com.asalkartechworks.himmat.party.model.CustomerType;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -17,6 +19,10 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     Optional<Customer> findByCustomerCode(String customerCode);
 
     boolean existsByCustomerCode(String customerCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Customer c WHERE c.id = :id")
+    Optional<Customer> findByIdWithLock(@Param("id") Long id);
 
     @Query(value = "SELECT nextval('seq_customer_code')", nativeQuery = true)
     Long getNextCustomerSequence();

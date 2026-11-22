@@ -24,7 +24,7 @@ The system is built as a maintainable, resilient Spring Boot modular monolith de
 | **BE03** | Customer, Customer Sites, Supplier Masters, Site Resolution | **Complete & Verified** | `V3__party_masters_and_sites.sql` |
 | **BE04A** | Inventory Management, Stock Movements, Manual Adjustments, Shared Transaction Foundation | **Complete & Verified** | `V4__stock_movements_and_inventory.sql` |
 | **BE04B** | Supplier Purchases, Inward Goods, Supplier Payments, Purchase Returns, Supplier Refunds, Ledger | **Complete & Verified** | `V5__supplier_purchases_and_ledger.sql` |
-| **BE05** | Sales Invoices, Immediate Billing, Customer Payments | *Pending* | Planned |
+| **BE05** | Sales Invoices, Immediate Billing, Customer Receipts, Advances, Dues, Customer Ledger | **Complete & Verified** | `V6__customer_invoices_and_ledger.sql` |
 | **BE06** | Bill Revisions, Customer Returns, Refunds | *Pending* | Planned |
 
 ---
@@ -167,3 +167,59 @@ Future modules implementing supplier purchases, customer billing, and returns mu
 ### 6.4 Negative Stock Invariant
 * Stock deductions in BE04B, BE05, and BE06 will throw `INSUFFICIENT_STOCK` (422) if requested deduction exceeds locked available quantity on hand.
 * Reversals or returns do not bypass this rule. Negative stock is strictly prohibited across all roles.
+
+---
+
+## 7. Customer Billing, Advances & Customer Ledger Sign Convention (BE05)
+
+The customer ledger uses an explicit, unambiguous signed financial model:
+* **Positive (+)** = Customer owes shop (Receivable / Debit / Charge)
+* **Negative (-)** = Shop owes customer or customer holds advance (Receipt / Credit / Advance)
+
+### Canonical Workflow:
+1. **Sales Invoice ₹1,900**:
+   * Immediate counter bill created without prerequisite sales order or quotation.
+   * Authoritative pricing re-evaluated via `PricingService` with GST-inclusive pricing.
+   * NORMAL and GST display formats produce identical payable totals.
+   * Stock decreases atomically (-qty, `StockMovementType.SALE`, `direction = OUT`, `sourceEntityType = "SALES_INVOICE"`).
+   * Ledger entry: `sourceType = INVOICE`, `amount = +1900.00`.
+   * Running balance: `+1900.00` (Customer owes shop ₹1,900).
+   * Due date set to `invoiceDate + 30 calendar days`.
+
+2. **Customer Receipt ₹2,000 (with ₹1,900 allocated, ₹100 advance)**:
+   * Multi-row CASH and ONLINE payment split recorded.
+   * ₹1,900 allocated to invoice (Invoice status becomes `PAID`, `outstanding = 0.00`).
+   * ₹100 unallocated amount retained as customer advance credit.
+   * Ledger entry: `sourceType = RECEIPT`, `amount = -2000.00`.
+   * Running balance: `1900 - 2000 = -100.00` (Customer holds ₹100 advance credit with the shop).
+
+3. **Subsequent Credit Bill with Advance Application**:
+   * Customer purchases ₹500 on credit.
+   * Applies ₹100 advance credit:
+     - Deducts ₹100 from unallocated receipt credit (receipt credit becomes ₹0.00).
+     - Adds ₹100 to invoice allocated amount (invoice settlement status becomes `PARTIALLY_PAID`, `outstanding = 400.00`).
+     - **CRITICAL**: Internal allocation between receipt advance and invoice document does NOT change net money owed, so no redundant ledger entry is created.
+   * Invoice ledger entry: `sourceType = INVOICE`, `amount = +500.00`.
+   * Running balance: `-100 + 500 = +400.00` (Customer owes shop ₹400).
+
+4. **Aging & Overdue Tracking**:
+   * An invoice is overdue when `status == POSTED`, `outstandingAmount > 0`, and `today > dueDate` (`dueDate = invoiceDate + 30 days`).
+   * `daysOverdue = ChronoUnit.DAYS.between(dueDate, today)`.
+   * Dues search and dues summary (`GET /api/v1/dues` and `GET /api/v1/dues/summary`) compute totals across all matching invoices.
+
+---
+
+## 8. Integration Contract for BE06 (Bill Revisions, Customer Returns & Refunds)
+
+BE06 builds directly on the BE05 sales invoice and customer receipt foundation:
+1. **Bill Revisions**:
+   * If bill items are revised, reversal movement (`StockMovementType.REVERSAL` or adjustment) restores original stock and applies new line stock.
+   * Difference in invoice total updates customer ledger.
+2. **Customer Returns**:
+   * `StockMovementType.CUSTOMER_RETURN`, `direction = IN`, `sourceEntityType = "CUSTOMER_RETURN"`.
+   * `allowInactiveVariants = true` to allow returning discontinued items originally sold on that invoice.
+   * Customer ledger entry: `sourceType = CUSTOMER_RETURN`, `amount = -returnAmount` (reduces customer debt or creates advance credit).
+   * Excess allocations are released back to receipt credit if return reduces invoice payable below allocated amount.
+3. **Customer Refunds**:
+   * Payout of cash/bank to customer from unallocated customer advance credit.
+   * Customer ledger entry: `sourceType = REFUND`, `amount = +refundAmount`.
