@@ -37,6 +37,61 @@ The frontend inherits the admin interface design established in BE01:
 
 ---
 
+## 5. Supplier Purchases, Payments, Returns & Ledger (BE04B)
+
+### 5.1 Purchase Invoice Creation (`/purchases/new`)
+* **Header Form**:
+  * **Supplier Selector**: Autocomplete with code, name, and current ledger balance.
+  * **Supplier Invoice Number**: Text input for physical vendor invoice number.
+  * **Purchase Date**: Defaults to today (`Asia/Kolkata`).
+  * **Notes**: Optional text area.
+* **Line Item Table**:
+  * **Variant Selector**: Search by SKU or product name.
+  * **Quantity**: Integer input $\ge 1$.
+  * **Price Basis Selector**: Toggle between `GST_INCLUSIVE` and `GST_EXCLUSIVE`.
+  * **Entered Unit Price**: Currency input.
+  * **Discount %**: Defaults to category purchase discount (e.g. 10%), overridable by user.
+  * **GST %**: Dropdown or numeric input (0%, 5%, 12%, 18%, 28%).
+  * **Update Product Cost Toggle**: Checkbox ("Update Master Purchase Cost"). Requires GST % if price is inclusive.
+  * **Computed Columns**: Net Unit Cost, Gross Unit Cost, Line Total.
+* **Summary Footer**:
+  * Displays: Subtotal (Excl Tax), Total Discount, Total GST, Total Payable.
+  * Optional: **Payment Section** to record immediate payment (Cash/Online) along with inward invoice.
+* **Submission**:
+  * Sends `Idempotency-Key` header with client UUID.
+
+### 5.2 Purchase Return Drawer / Modal (`/purchases/:id/return`)
+* **Header**: Displays Purchase Number, Supplier Name, Invoice Date, Original Payable.
+* **Lines Table**:
+  * Displays: SKU, Product Name, Original Quantity, Previously Returned, Available Returnable Qty, In-Stock On-Hand Qty.
+  * **Return Quantity Input**: Bounded between 1 and `min(Available Returnable, In-Stock)`.
+  * **Reason**: Mandatory return explanation.
+* **Live Calculation**: Displays total return refund amount. Shows warning if excess payment allocation will be released back to supplier credit.
+
+### 5.3 Supplier Payments & Credit Allocation (`/suppliers/:id/payments`)
+* **Payment Modal**:
+  * **Total Amount**: Currency input.
+  * **Components Split**: Multi-row CASH and ONLINE inputs with reference number.
+  * **Allocations Section**: Lists unpaid posted purchases with remaining outstanding balance; allows assigning amounts to each invoice.
+  * Any unallocated excess automatically displays as "Supplier Advance Credit".
+* **Standalone Credit Allocation**:
+  * Select unallocated payment advance and assign to unpaid purchase invoices without moving net ledger balance.
+
+### 5.4 Supplier Ledger & Account Summary (`/suppliers/:id/ledger`)
+* **Account Summary Cards**:
+  * **Current Balance**: Highlighted badge:
+    * Positive: "Shop Owes: ₹X" (`text-rose-700 bg-rose-50`).
+    * Negative: "Supplier Holds Credit / Advance: ₹X" (`text-emerald-700 bg-emerald-50`).
+    * Zero: "Settled: ₹0.00" (`text-slate-600 bg-slate-100`).
+  * **Summary Metrics**: Total Purchases, Total Paid, Total Returned, Total Refunded, Unallocated Credit, Outstanding Payables.
+* **Ledger Statement Table**:
+  * Date range selector (`startDate`, `endDate`).
+  * Opening Balance display row.
+  * Columns: `Date`, `Type` (Purchase, Payment, Return, Refund), `Reference #`, `Amount (Debit/Credit)`, `Running Balance`, `Notes`.
+  * Closing Balance display row.
+
+---
+
 ## 3. Manual Stock Adjustment Modal / Drawer
 
 ### 3.1 Requirements & Workflow

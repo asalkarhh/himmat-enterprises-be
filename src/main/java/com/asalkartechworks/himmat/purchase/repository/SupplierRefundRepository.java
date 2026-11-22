@@ -1,0 +1,17 @@
+package com.asalkartechworks.himmat.purchase.repository;
+
+import com.asalkartechworks.himmat.purchase.model.SupplierRefund;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface SupplierRefundRepository extends JpaRepository<SupplierRefund, Long> {
+
+    Optional<SupplierRefund> findByRefundNumber(String refundNumber);
+
+    @Query(value = "SELECT nextval('seq_supplier_refund_number')", nativeQuery = true)
+    Long getNextRefundSequence();
+}

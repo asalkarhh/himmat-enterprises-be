@@ -23,7 +23,7 @@ The system is built as a maintainable, resilient Spring Boot modular monolith de
 | **BE02** | Product Catalog, Variants, Pricing Methods, Inventory Balance 1:1, Master Idempotency | **Complete & Verified** | `V2__catalog_variants_inventory.sql` |
 | **BE03** | Customer, Customer Sites, Supplier Masters, Site Resolution | **Complete & Verified** | `V3__party_masters_and_sites.sql` |
 | **BE04A** | Inventory Management, Stock Movements, Manual Adjustments, Shared Transaction Foundation | **Complete & Verified** | `V4__stock_movements_and_inventory.sql` |
-| **BE04B** | Supplier Purchases, Inward Goods, Supplier Payments, Purchase Returns | *Pending* | Planned next |
+| **BE04B** | Supplier Purchases, Inward Goods, Supplier Payments, Purchase Returns, Supplier Refunds, Ledger | **Complete & Verified** | `V5__supplier_purchases_and_ledger.sql` |
 | **BE05** | Sales Invoices, Immediate Billing, Customer Payments | *Pending* | Planned |
 | **BE06** | Bill Revisions, Customer Returns, Refunds | *Pending* | Planned |
 
@@ -50,6 +50,16 @@ The system is built as a maintainable, resilient Spring Boot modular monolith de
     * `chk_stock_movement_quantity`: `quantity > 0`.
     * `chk_stock_movement_arithmetic`: Math verification ensuring `quantity_after = quantity_before ± quantity`.
   * Unique index `uq_stock_movement_source_effect` preventing duplicate processing of the same source effect.
+* **`V5__supplier_purchases_and_ledger.sql`**:
+  * `purchase`: Purchase invoice header (`PO-%05d`, supplier snapshots, subtotal, discount, GST, total payable, allocated amount, version, audit).
+  * `purchase_line`: Purchase lines (variant, line index, product snapshots, whole piece qty, price basis, unit price, discount %, GST %, net/gross cost, total, update product cost flag).
+  * `supplier_payment`: Standalone or immediate supplier payments (`SPAY-%05d`, date, total amount, unallocated credit, audit).
+  * `payment_component`: Cash/Online split for payments and refunds.
+  * `payment_allocation`: Payment-to-purchase allocation mapping.
+  * `purchase_return`: Purchase returns to supplier (`PR-%05d`, return date, return amount, reason, audit).
+  * `purchase_return_line`: Return lines referencing original purchase lines, returned quantity, unit cost, and line total.
+  * `supplier_refund`: Cash/bank refunds from supplier to shop (`SRF-%05d`, date, amount, reason, audit).
+  * `supplier_ledger_entry`: Immutable supplier financial ledger with running balances.
 
 ---
 
@@ -57,10 +67,39 @@ The system is built as a maintainable, resilient Spring Boot modular monolith de
 
 ### 4.1 Deadlock-Free Lock Hierarchy
 To ensure zero deadlocks across complex transactions that touch multiple resources, all services across all modules MUST acquire locks in the following strict order:
-1. **Party Balances**: Customer or Supplier accounts (sorted by Party ID ascending).
-2. **Business Documents**: Document headers and lines (Purchase invoice, Sales bill).
-3. **Inventory Balances**: `inventory_balance` rows (sorted strictly by `variant_id` ascending).
-4. **Appends**: Insert `stock_movement`, ledger entries, and audit logs.
+1. **Party Balances**: Customer or Supplier accounts (e.g. `supplierRepository.findByIdWithLock(supplierId)`).
+2. **Business Documents**: Document headers and lines (Purchase invoices, Payment allocations, Purchase returns).
+3. **Inventory Balances**: `inventory_balance` rows (sorted strictly by `variant_id` ascending via `StockPostingService`).
+4. **Appends**: Insert `supplier_ledger_entry`, `stock_movement`, and audit records.
+
+---
+
+## 5. Supplier Financial Model & Ledger Sign Convention
+
+The supplier ledger uses an explicit, unambiguous signed financial model:
+* **Positive (+)** = Shop owes supplier (Payable / Liability)
+* **Negative (-)** = Supplier owes shop or holds shop advance (Credit / Asset)
+
+### Canonical Workflow:
+1. **Purchase ₹1,000**:
+   * Stock increases atomically (+qty).
+   * Ledger entry: `sourceType = PURCHASE`, `amount = +1000.00`.
+   * Running balance: `+1000.00` (Shop owes ₹1,000).
+2. **Payment ₹600**:
+   * Cash/Online split recorded. Allocated to purchase.
+   * Ledger entry: `sourceType = PAYMENT`, `amount = -600.00`.
+   * Running balance: `+400.00` (Shop owes ₹400).
+3. **Purchase Return ₹500**:
+   * Stock decreases atomically (-qty).
+   * Cumulative return checked against original line quantity.
+   * Net remaining payable is 1000 - 500 = 500. Excess payment allocation (600 - 500 = 100) is released back to payment's `unallocatedAmount`!
+   * Ledger entry: `sourceType = PURCHASE_RETURN`, `amount = -500.00`.
+   * Running balance: `400 - 500 = -100.00` (Supplier owes shop ₹100 or holds shop advance).
+4. **Supplier Refund IN ₹100**:
+   * Supplier returns ₹100 in cash/bank to the shop.
+   * Consumes available supplier credit without touching inventory.
+   * Ledger entry: `sourceType = REFUND`, `amount = +100.00`.
+   * Running balance: `-100 + 100 = 0.00` (Account fully settled).
 
 ### 4.2 Row-Level Locking in `StockPostingService`
 Multi-variant operations extract distinct variant IDs, sort them in ascending order (`sortedVariantIds = variantIds.stream().distinct().sorted().toList()`), and execute:
