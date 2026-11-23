@@ -85,4 +85,8 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
                                                    @Param("dueEndDate") LocalDate dueEndDate,
                                                    @Param("overdueOnly") Boolean overdueOnly,
                                                    @Param("currentDate") LocalDate currentDate);
+
+    List<SalesInvoice> findByStatusAndInvoiceDateBetweenOrderByInvoiceDateAsc(InvoiceStatus status, LocalDate startDate, LocalDate endDate);
+
+    List<SalesInvoice> findByInvoiceDateBetweenOrderByInvoiceDateAsc(LocalDate startDate, LocalDate endDate);
 }

@@ -41,4 +41,6 @@ public interface SupplierPaymentRepository extends JpaRepository<SupplierPayment
                                         @Param("startDate") LocalDate startDate,
                                         @Param("endDate") LocalDate endDate,
                                         Pageable pageable);
+
+    List<SupplierPayment> findByPaymentDateBetweenOrderByPaymentDateAsc(LocalDate startDate, LocalDate endDate);
 }

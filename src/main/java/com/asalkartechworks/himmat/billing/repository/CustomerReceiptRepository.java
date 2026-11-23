@@ -41,4 +41,6 @@ public interface CustomerReceiptRepository extends JpaRepository<CustomerReceipt
                                          @Param("startDate") LocalDate startDate,
                                          @Param("endDate") LocalDate endDate,
                                          Pageable pageable);
+
+    List<CustomerReceipt> findByReceiptDateBetweenOrderByReceiptDateAsc(LocalDate startDate, LocalDate endDate);
 }

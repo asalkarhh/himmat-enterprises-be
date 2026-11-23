@@ -18,4 +18,7 @@ public interface SalesInvoiceRevisionRepository extends JpaRepository<SalesInvoi
 
     @Query("SELECT MAX(r.revisionNumber) FROM SalesInvoiceRevision r WHERE r.invoice.id = :invoiceId")
     Optional<Integer> findMaxRevisionNumberByInvoiceId(@Param("invoiceId") Long invoiceId);
+
+    @Query("SELECT r FROM SalesInvoiceRevision r WHERE r.createdAt >= :startInstant AND r.createdAt <= :endInstant ORDER BY r.createdAt ASC")
+    List<SalesInvoiceRevision> findByCreatedAtBetween(@Param("startInstant") java.time.Instant startInstant, @Param("endInstant") java.time.Instant endInstant);
 }

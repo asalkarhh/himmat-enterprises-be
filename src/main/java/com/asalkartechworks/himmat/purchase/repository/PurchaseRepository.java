@@ -44,4 +44,8 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
                                   @Param("endDate") LocalDate endDate,
                                   @Param("search") String search,
                                   Pageable pageable);
+
+    List<Purchase> findByStatusAndPurchaseDateBetweenOrderByPurchaseDateAsc(PurchaseStatus status, LocalDate startDate, LocalDate endDate);
+
+    List<Purchase> findByPurchaseDateBetweenOrderByPurchaseDateAsc(LocalDate startDate, LocalDate endDate);
 }

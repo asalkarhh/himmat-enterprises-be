@@ -25,7 +25,9 @@ The system is built as a maintainable, resilient Spring Boot modular monolith de
 | **BE04A** | Inventory Management, Stock Movements, Manual Adjustments, Shared Transaction Foundation | **Complete & Verified** | `V4__stock_movements_and_inventory.sql` |
 | **BE04B** | Supplier Purchases, Inward Goods, Supplier Payments, Purchase Returns, Supplier Refunds, Ledger | **Complete & Verified** | `V5__supplier_purchases_and_ledger.sql` |
 | **BE05** | Sales Invoices, Immediate Billing, Customer Receipts, Advances, Dues, Customer Ledger | **Complete & Verified** | `V6__customer_invoices_and_ledger.sql` |
-| **BE06** | Bill Revisions, Customer Returns, Refunds | *Pending* | Planned |
+| **BE06** | Bill Revisions, Customer Returns, Refunds | **Complete & Verified** | `V7__invoice_revisions_returns_refunds.sql` |
+| **BE07** | Operational Expenses, Dashboard, Business Reports, Owner Profit, Printable PDFs | **Complete & Verified** | `V8__operational_expenses.sql` |
+| **BE08** | Counter Register, Shift Management, End-of-Day Closures | *Pending* | Planned |
 
 ---
 
@@ -263,9 +265,85 @@ $$\begin{array}{lcccc}
 
 ---
 
-## 9. Integration Contract for BE07 (Expenses & Financial Reports)
+## 9. Operational Expenses, Dashboards, Business Reports, Owner Profit & PDF Documents (BE07)
 
-BE07 builds upon the completed ledger, purchase, and billing foundations:
-1. Operational expenses (rent, utilities, salaries, maintenance).
-2. Profit and loss accounting combining sales revenue, COGS (purchase costs), returns, discounts, and expenses.
-3. Daily counter cash-register reconciliation (opening float, cash sales, cash receipts, cash purchase payments, cash refunds, cash expenses, closing balance).
+BE07 establishes the operational expense register, business intelligence dashboard, operational reports, Owner-only profit analysis, and printable PDF document generation across the entire enterprise.
+
+### 9.1 Database Schema (Flyway V8)
+* `seq_expense_number`: Independent BIGINT sequence for sequential expense identifiers (`EXP-%05d`).
+* `operational_expense`: Master operational expense record:
+  * Number sequence (`EXP-%05d`), date, category (`RENT`, `UTILITIES`, `SALARY`, `TRANSPORT`, `SHOP_OPERATIONS`, `OTHER`), total amount.
+  * Status (`ACTIVE`, `REVERSED`), reversal metadata (`reversed_at`, `reversed_by`, `reversal_reason`).
+  * Concurrency and audit tracking (`version`, `created_at`, `created_by`, `updated_at`, `updated_by`).
+  * Check constraints: `chk_expense_amount (amount > 0)`, `chk_expense_status (status IN ('ACTIVE', 'REVERSED'))`.
+* `operational_expense_component`: Split payment modes for each expense (`CASH`, `ONLINE` with reference):
+  * Check constraints: `chk_expense_comp_amount (amount > 0)`, `chk_expense_comp_method (method IN ('CASH', 'ONLINE'))`.
+  * Index: `idx_expense_component_expense_id`.
+
+### 9.2 Operational Expenses & Soft Bookkeeping Reversals
+* **Registration**: Expenses support multi-row cash and online payment splits. Component sum must strictly equal the expense amount.
+* **Soft Reversals**: Expenses can be reversed for bookkeeping corrections with an explicit reason.
+  * Reversals update status to `REVERSED` with an audit timestamp and actor ID.
+  * Reversing an expense **does NOT fabricate a fake cash receipt**.
+  * Reversal immediately excludes the expense from period operating totals, profit deductions, and cash movement outflows.
+  * Concurrency guard: Reversals acquire pessimistic write locks (`findByIdWithLock`) and verify optimistic version numbers.
+
+### 9.3 Dashboard Summary (`GET /api/v1/dashboard/summary`)
+Provides real-time aggregated KPIs across any specified date range (defaulting to current calendar month in `Asia/Kolkata`):
+* **Sales Activity**: Gross sales, net revision delta, customer returns credit, net sales, invoice count.
+* **Collections**: Customer receipts, customer refunds, net collections, receipt count.
+* **Receivables & Dues**: Total customer outstanding, overdue receivables (past 30 days), count of customers with active dues.
+* **Purchases & Payables**: Period purchases, purchase returns, net purchases, supplier payments, supplier refunds, total supplier payables outstanding, count of suppliers with dues.
+* **Operating Expenses**: Active period expenses and expense count.
+* **Inventory Health**: Total catalog variants, zero-stock variant count, low-stock variant count (quantity $\le$ threshold).
+* **Owner-Only Profit Metrics**: Net revenue, COGS, gross profit, gross margin %, operating expenses, net profit, coverage %, and unknown-cost sales. **Strictly omitted for non-Owner users**.
+
+### 9.4 Business & Operational Reports
+* **Sales Report (`GET /api/v1/reports/sales`)**:
+  * `ACTIVITY` basis (default): Aggregates sales invoices, revision deltas, and returns occurring strictly within the date window. Matches real economic activity.
+  * `DOCUMENT` basis: Aggregates documents whose original document date falls within the window.
+  * Supports filtering by `customerId`, tax breakdown (taxable vs GST), and line-item details.
+* **Purchase Report (`GET /api/v1/reports/purchases`)**:
+  * Inward purchases, purchase returns, supplier payments, and supplier refunds within period.
+  * Computes net inventory additions and net cash outflows to suppliers.
+* **Inventory Valuation Report (`GET /api/v1/reports/inventory`)**:
+  * Stock on hand, inventory valuation at cost, inventory valuation at selling price, and reorder alerts.
+  * Filters for `zeroStockOnly`, `lowStockOnly`, `brandId`, and `categoryId`.
+* **Cash Movement Report (`GET /api/v1/reports/cash-movements`)**:
+  * Real money flows only: Receipts IN (+), Supplier Refunds IN (+), Supplier Payments OUT (-), Customer Refunds OUT (-), Active Expenses OUT (-).
+  * Breaks down every movement by `CASH` vs `ONLINE`.
+
+### 9.5 Owner Profit & Product Margins (`GET /api/v1/reports/profit`)
+* **Strict Role Security**: Enforced via `@PreAuthorize("hasAuthority('REPORT:PROFIT') or hasRole('OWNER')")`. Non-owner users receive `403 Forbidden`.
+* **Historical Cost Snapshot Integrity**:
+  * COGS is computed **strictly from the immutable line purchase cost snapshot** (`purchaseCostExclTax`) captured at the moment of invoice creation.
+  * Current catalog purchase costs or updated supplier prices are **never used** to rewrite historical profit margins.
+* **Unknown Cost Handling**:
+  * Lines with unknown or null historical cost are segregated into `salesValueExcludedUnknownCost`.
+  * Computes `costCoveragePct` ($knownCostSales / totalSales \times 100$) so the Owner can assess margin confidence.
+* **Net Profit**: Computed as $knownGrossProfit - totalOperatingExpenses$.
+
+### 9.6 Printable PDF Documents (`/api/v1/documents/**/pdf`)
+All PDF generation is performed server-side using OpenPDF 2.0.3 with consistent layout, enterprise typography, page numbers, and persisted shop settings:
+1. `GET /api/v1/documents/invoices/{id}/pdf?format=NORMAL`: Clean POS thermal/A4 invoice without GST breakdown.
+2. `GET /api/v1/documents/invoices/{id}/pdf?format=GST`: Tax invoice with GSTIN, HSN/SAC codes, CGST, SGST, IGST breakdown.
+3. `GET /api/v1/documents/invoices/{id}/revisions/{revId}/pdf`: Versioned invoice revision statement with line changes.
+4. `GET /api/v1/documents/customer-receipts/{id}/pdf`: Customer payment receipt voucher.
+5. `GET /api/v1/documents/customer-returns/{id}/pdf`: Customer credit note / return voucher.
+6. `GET /api/v1/documents/customer-refunds/{id}/pdf`: Customer refund disbursement voucher.
+7. `GET /api/v1/documents/customers/{id}/ledger/pdf`: Customer statement of accounts with running balance.
+8. `GET /api/v1/documents/purchases/{id}/pdf`: Supplier purchase order / inward invoice record.
+9. `GET /api/v1/documents/purchase-returns/{id}/pdf`: Supplier debit note / purchase return voucher.
+10. `GET /api/v1/documents/supplier-payments/{id}/pdf`: Supplier payment advice voucher.
+11. `GET /api/v1/documents/suppliers/{id}/ledger/pdf`: Supplier statement of accounts with running balance.
+12. `GET /api/v1/documents/expenses/{id}/pdf`: Operational expense payment voucher.
+
+---
+
+## 10. Integration Contract for BE08 (Counter Register & Shift Closures)
+
+BE08 will build on the completed financial and cash movement architecture:
+1. Counter opening float and shift registration.
+2. Real-time cash drawer tracking (cash sales, receipts, payments, refunds, expenses).
+3. End-of-day physical cash count reconciliation and shift closure reports.
+4. Cash discrepancy auditing (shortages / overages).

@@ -259,3 +259,70 @@ The frontend inherits the admin interface design established in BE01:
   * Reason textarea.
 * **Submission**:
   * "Disburse Refund" (`POST /api/v1/customers/:id/refunds`, with `Idempotency-Key`). Updates customer balance to ₹0.00.
+
+---
+
+## 8. Expenses, Dashboard, Reports & Printable PDFs (BE07)
+
+### 8.1 Dashboard Summary (`/dashboard`)
+* **Period Filter Bar**:
+  * Date range selector (Defaults to current calendar month: 1st of month to today).
+  * Quick presets: "Today", "This Week", "This Month", "Last Month".
+* **KPI Card Grid**:
+  * **Sales Activity**: Gross Sales, Revisions Delta, Returns Credit, Net Sales, Invoice Count.
+  * **Collections & Cash**: Customer Receipts, Customer Refunds, Net Collections.
+  * **Customer Receivables**: Total Customer Outstanding, Overdue Receivables (>30 days), Customers with Dues.
+  * **Purchases & Payables**: Net Purchases, Supplier Payments, Total Payables, Suppliers with Dues.
+  * **Operating Expenses**: Period Operating Expenses, Active Expense Count.
+  * **Inventory Health**: Total Variants, Zero Stock Variants (red warning), Low Stock Variants (amber warning).
+* **Owner-Only Profit Card** (`profitSummary`):
+  * Visible only when `profitSummary != null` (Owner role). Hidden automatically for Managers.
+  * Displays: Net Revenue, COGS, Gross Profit, Gross Margin %, Operating Expenses, Estimated Net Profit, Margin Confidence / Coverage %.
+  * Unknown Cost Callout: Shows sales value excluded from known profit.
+
+### 8.2 Operational Expenses Register (`/expenses`)
+* **Top Header**:
+  * Primary Action: "Record Expense" button (`bg-teal-600 hover:bg-teal-700 text-white`).
+* **Filters**:
+  * Category dropdown: `All Categories`, `RENT`, `UTILITIES`, `SALARY`, `TRANSPORT`, `SHOP_OPERATIONS`, `OTHER`.
+  * Status toggle: `All`, `Active`, `Reversed`.
+  * Date Range picker.
+* **Table Columns**:
+  * `Expense #`, `Date`, `Category`, `Description`, `Payment Modes`, `Amount`, `Status`, `Actions`.
+  * Status Badge: `Active` (green pill) vs `Reversed` (gray line-through pill with tooltip showing reason and reversed date).
+* **Record Expense Modal**:
+  * Category selector, Expense Date (defaults to today), Description (required).
+  * Amount (total currency input).
+  * Payment Split: Add multiple rows for `CASH` and `ONLINE` with reference. Client validates component sum matches total amount.
+* **Soft Reversal Confirmation Dialog**:
+  * Displays expense summary and requires explicit reason textarea.
+  * Explains clearly: "Reversing marks this expense as cancelled for bookkeeping and removes it from reports. It does not fabricate a cash receipt."
+
+### 8.3 Business Reports (`/reports`)
+* **Report Tabs**: `Sales`, `Purchases`, `Inventory Valuation`, `Cash Movements`, `Owner Profit & Margins`.
+* **Sales Report Tab**:
+  * Basis toggle: `Activity Basis` (default, matches period accounting) vs `Document Date Basis`.
+  * Filters: Customer selector, Date Range.
+  * Summaries: Gross Sales, Net Sales, Taxable Amount, GST Breakdown (CGST, SGST, IGST).
+* **Cash Movements Tab**:
+  * Inflows: Customer Receipts, Supplier Refunds.
+  * Outflows: Supplier Payments, Customer Refunds, Operating Expenses.
+  * Net Cashflow summary with Cash vs Online split breakdown.
+* **Owner Profit Tab** (`/reports/profit`):
+  * Only rendered if current user has `OWNER` role; navigation link hidden for `MANAGER`.
+  * Summarizes known gross profit, product-by-product breakdown, and coverage %.
+
+### 8.4 Printable PDF Documents
+* **PDF Action Buttons**: Rendered as secondary action buttons with printer/download icon (`border-slate-300 hover:bg-slate-50 text-slate-700`):
+  * Invoices: "Print Invoice" dropdown offering "Normal Receipt / POS" and "GST Tax Invoice".
+  * Invoice Revision: "Download Revision Statement".
+  * Customer Receipt: "Print Payment Receipt".
+  * Customer Return: "Print Credit Note".
+  * Customer Refund: "Print Refund Voucher".
+  * Customer Ledger: "Download Statement of Account (PDF)".
+  * Purchases: "Print Purchase Order / Inward Record".
+  * Purchase Return: "Print Debit Note".
+  * Supplier Payment: "Print Payment Advice".
+  * Supplier Ledger: "Download Supplier Statement (PDF)".
+  * Operational Expense: "Print Payment Voucher".
+* All PDF requests send `Authorization: Bearer <token>` and receive `application/pdf` inline streams for browser printing or saving.

@@ -63,6 +63,13 @@ A resilient, transaction-safe backend modular monolith for Himmat Enterprises (p
   * Explicit valuation policy handling: historical price-edited lines require explicit policy (`ORIGINAL_INVOICE_PRICE` vs `LATEST_REVISED_PRICE`).
   * Customer refunds disburse unallocated customer advance credit via CASH/ONLINE without touching stock.
   * Full customer ledger reconciliation: Invoices (+), Receipts (-), Returns (-), Refunds (+).
+* **BE07: Operational Expenses, Dashboards, Reports, Owner Profit & PDF Generation** (Complete)
+  * Operational expense register (`EXP-%05d`) with category classification (`RENT`, `UTILITIES`, `SALARY`, `TRANSPORT`, `SHOP_OPERATIONS`, `OTHER`) and multi-mode CASH/ONLINE payment components.
+  * Non-destructive soft reversals with required reason, preserving audit history without fabricating fake cash receipts.
+  * Executive dashboard summary (`GET /api/v1/dashboard/summary`) aggregating sales, collections, receivables, payables, operating expenses, and inventory health.
+  * Strict Owner-only profit metrics (`GET /api/v1/reports/profit` and `GET /api/v1/reports/profit/products`) using immutable transaction line cost snapshots (`purchaseCostExclTax`), segregating unknown-cost items into coverage tracking, and returning 403 Forbidden for Manager.
+  * Comprehensive business reports: Sales report (with `ACTIVITY` vs `DOCUMENT` basis), Purchase report, Inventory valuation report, and Cash movement report.
+  * Server-side OpenPDF document rendering for 12 business documents: Normal/GST invoices, revisions, receipts, credit notes, refunds, customer ledger statements, purchase orders, debit notes, payment advice, supplier ledger statements, and expense vouchers.
 
 ---
 
@@ -134,14 +141,40 @@ A resilient, transaction-safe backend modular monolith for Himmat Enterprises (p
 | `GET` | `/api/v1/customers/{id}/refunds` | List customer refunds for customer | Owner, Manager |
 | `GET` | `/api/v1/customer-refunds/{id}` | Get customer refund details by ID | Owner, Manager |
 | `GET` | `/api/v1/customer-refunds` | Search all customer refunds across dates | Owner, Manager |
-| `POST` | `/api/v1/customers/{id}/receipts` | Record customer receipt (CASH, ONLINE) & allocate | Owner, Manager |
-| `GET` | `/api/v1/customers/{id}/receipts` | List receipts for specific customer | Owner, Manager |
-| `GET` | `/api/v1/customer-receipts/{id}` | Get customer receipt details | Owner, Manager |
-| `POST` | `/api/v1/customers/{id}/allocations` | Apply unallocated customer credit to invoices | Owner, Manager |
-| `GET` | `/api/v1/dues` | Search due and overdue invoices | Owner, Manager |
-| `GET` | `/api/v1/dues/summary` | Get total outstanding, total overdue, and invoice counts | Owner, Manager |
-| `GET` | `/api/v1/customers/{id}/account` | Get customer account totals, credit, and current balance | Owner, Manager |
-| `GET` | `/api/v1/customers/{id}/ledger` | Get customer ledger statement with opening/closing balances | Owner, Manager |
+
+### Operational Expenses (BE07)
+| Method | Path | Description | Access |
+|---|---|---|---|
+| `POST` | `/api/v1/expenses` | Register operational expense with split CASH/ONLINE | Owner, Manager |
+| `POST` | `/api/v1/expenses/{id}/reversals` | Soft reverse an operational expense with reason | Owner, Manager |
+| `GET` | `/api/v1/expenses/{id}` | Get operational expense details by ID | Owner, Manager |
+| `GET` | `/api/v1/expenses` | Search operational expenses with category & date filters | Owner, Manager |
+
+### Dashboard & Business Reports (BE07)
+| Method | Path | Description | Access |
+|---|---|---|---|
+| `GET` | `/api/v1/dashboard/summary` | Executive dashboard summary (Owner sees profit, Manager hidden) | Owner, Manager |
+| `GET` | `/api/v1/reports/sales` | Sales report with ACTIVITY / DOCUMENT view & customer filters | Owner, Manager |
+| `GET` | `/api/v1/reports/purchases` | Purchase, return, payment & refund activity report | Owner, Manager |
+| `GET` | `/api/v1/reports/inventory` | Inventory valuation & low-stock / zero-stock alerts report | Owner, Manager |
+| `GET` | `/api/v1/reports/cash-movements` | Real money movement report (receipts, refunds, payments, expenses) | Owner, Manager |
+| `GET` | `/api/v1/reports/profit` | Owner profit report (gross profit, COGS, operating exp, net profit) | **Owner only** (403 for Manager) |
+| `GET` | `/api/v1/reports/profit/products` | Owner product-level profitability & gross margin report | **Owner only** (403 for Manager) |
+
+### Printable PDF Documents (BE07)
+| Method | Path | Description | Access |
+|---|---|---|---|
+| `GET` | `/api/v1/documents/invoices/{id}/pdf` | Generate printable sales invoice PDF (Normal or GST format) | Owner, Manager |
+| `GET` | `/api/v1/documents/invoices/{id}/revisions/{revId}/pdf` | Generate invoice revision statement PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/customer-receipts/{id}/pdf` | Generate customer payment receipt voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/customer-returns/{id}/pdf` | Generate customer credit note / return voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/customer-refunds/{id}/pdf` | Generate customer refund disbursement voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/customers/{id}/ledger/pdf` | Generate customer statement of accounts PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/purchases/{id}/pdf` | Generate purchase order / inward invoice record PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/purchase-returns/{id}/pdf` | Generate supplier debit note / purchase return voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/supplier-payments/{id}/pdf` | Generate supplier payment advice voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/suppliers/{id}/ledger/pdf` | Generate supplier statement of accounts PDF | Owner, Manager |
+| `GET` | `/api/v1/documents/expenses/{id}/pdf` | Generate operational expense voucher PDF | Owner, Manager |
 
 ---
 

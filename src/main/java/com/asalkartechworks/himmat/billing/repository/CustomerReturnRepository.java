@@ -33,4 +33,6 @@ public interface CustomerReturnRepository extends JpaRepository<CustomerReturn, 
                                       @Param("startDate") LocalDate startDate,
                                       @Param("endDate") LocalDate endDate,
                                       Pageable pageable);
+
+    List<CustomerReturn> findByReturnDateBetweenOrderByReturnDateAsc(LocalDate startDate, LocalDate endDate);
 }
