@@ -27,7 +27,7 @@ The system is built as a maintainable, resilient Spring Boot modular monolith de
 | **BE05** | Sales Invoices, Immediate Billing, Customer Receipts, Advances, Dues, Customer Ledger | **Complete & Verified** | `V6__customer_invoices_and_ledger.sql` |
 | **BE06** | Bill Revisions, Customer Returns, Refunds | **Complete & Verified** | `V7__invoice_revisions_returns_refunds.sql` |
 | **BE07** | Operational Expenses, Dashboard, Business Reports, Owner Profit, Printable PDFs | **Complete & Verified** | `V8__operational_expenses.sql` |
-| **BE08** | Counter Register, Shift Management, End-of-Day Closures | *Pending* | Planned |
+| **BE08** | Product Catalog Import, Finolex Mapping, End-to-End Acceptance Scenario | **Complete & Verified** | `V9__product_import_tracking.sql` |
 
 ---
 
@@ -323,27 +323,90 @@ Provides real-time aggregated KPIs across any specified date range (defaulting t
   * Computes `costCoveragePct` ($knownCostSales / totalSales \times 100$) so the Owner can assess margin confidence.
 * **Net Profit**: Computed as $knownGrossProfit - totalOperatingExpenses$.
 
-### 9.6 Printable PDF Documents (`/api/v1/documents/**/pdf`)
+### 9.6 Printable PDF Documents (`/api/v1/**/pdf`)
 All PDF generation is performed server-side using OpenPDF 2.0.3 with consistent layout, enterprise typography, page numbers, and persisted shop settings:
-1. `GET /api/v1/documents/invoices/{id}/pdf?format=NORMAL`: Clean POS thermal/A4 invoice without GST breakdown.
-2. `GET /api/v1/documents/invoices/{id}/pdf?format=GST`: Tax invoice with GSTIN, HSN/SAC codes, CGST, SGST, IGST breakdown.
-3. `GET /api/v1/documents/invoices/{id}/revisions/{revId}/pdf`: Versioned invoice revision statement with line changes.
-4. `GET /api/v1/documents/customer-receipts/{id}/pdf`: Customer payment receipt voucher.
-5. `GET /api/v1/documents/customer-returns/{id}/pdf`: Customer credit note / return voucher.
-6. `GET /api/v1/documents/customer-refunds/{id}/pdf`: Customer refund disbursement voucher.
-7. `GET /api/v1/documents/customers/{id}/ledger/pdf`: Customer statement of accounts with running balance.
-8. `GET /api/v1/documents/purchases/{id}/pdf`: Supplier purchase order / inward invoice record.
-9. `GET /api/v1/documents/purchase-returns/{id}/pdf`: Supplier debit note / purchase return voucher.
-10. `GET /api/v1/documents/supplier-payments/{id}/pdf`: Supplier payment advice voucher.
-11. `GET /api/v1/documents/suppliers/{id}/ledger/pdf`: Supplier statement of accounts with running balance.
-12. `GET /api/v1/documents/expenses/{id}/pdf`: Operational expense payment voucher.
+1. `GET /api/v1/invoices/{id}/pdf?format=NORMAL`: Clean POS thermal/A4 invoice without GST breakdown.
+2. `GET /api/v1/invoices/{id}/pdf?format=GST`: Tax invoice with GSTIN, HSN/SAC codes, CGST, SGST, IGST breakdown.
+3. `GET /api/v1/invoices/{id}/revisions/{revId}/pdf`: Versioned invoice revision statement with line changes.
+4. `GET /api/v1/customer-receipts/{id}/pdf`: Customer payment receipt voucher.
+5. `GET /api/v1/customer-returns/{id}/pdf`: Customer credit note / return voucher.
+6. `GET /api/v1/customer-refunds/{id}/pdf`: Customer refund disbursement voucher.
+7. `GET /api/v1/customers/{id}/ledger/pdf`: Customer statement of accounts with running balance.
+8. `GET /api/v1/purchases/{id}/pdf`: Supplier purchase order / inward invoice record.
+9. `GET /api/v1/purchases/returns/{id}/pdf`: Supplier debit note / purchase return voucher.
+10. `GET /api/v1/supplier-payments/{id}/pdf`: Supplier payment advice voucher.
+11. `GET /api/v1/supplier-refunds/{id}/pdf`: Supplier refund receipt voucher.
+12. `GET /api/v1/suppliers/{id}/ledger/pdf`: Supplier statement of accounts with running balance.
+13. `GET /api/v1/expenses/{id}/pdf`: Operational expense payment voucher.
 
 ---
 
-## 10. Integration Contract for BE08 (Counter Register & Shift Closures)
+## 10. Product Catalog Import Engine & End-to-End Acceptance (BE08)
 
-BE08 will build on the completed financial and cash movement architecture:
-1. Counter opening float and shift registration.
-2. Real-time cash drawer tracking (cash sales, receipts, payments, refunds, expenses).
-3. End-of-day physical cash count reconciliation and shift closure reports.
-4. Cash discrepancy auditing (shortages / overages).
+### 10.1 Schema & Audit Tracking (`V9__product_import_tracking.sql`)
+BE08 introduces persistent audit tracking for all bulk catalog import executions:
+* **Sequence**: `seq_import_run_number` generating run codes formatted as `IMP-%05d`.
+* **`catalog_import_run`**:
+  * Tracks run code, source filename, SHA-256 file checksum, import mode (`DRY_RUN`, `CREATE_ONLY`, `UPDATE`), execution status (`STARTED`, `COMPLETED`, `FAILED`), row counts (total, created, updated, skipped, failed), error messages, actor ID, and timestamps (`started_at`, `completed_at`).
+* **`catalog_import_row`**:
+  * Per-row tracking capturing row number, raw source data (JSONB), action taken (`CREATED`, `UPDATED`, `SKIPPED`, `FAILED`, `PLANNED_CREATE`, `PLANNED_UPDATE`, `NO_CHANGE`), resolved product/variant IDs, outcome message, and error details.
+
+### 10.2 Supported Import Modes
+1. **`DRY_RUN`**:
+   * Evaluates the workbook, validates structure and contents, computes deterministic SKUs, detects existing vs new items, and records run outcomes without writing any catalog or inventory entities to the database.
+2. **`CREATE_ONLY`**:
+   * Idempotently creates missing Brands, Categories, Subcategories, Products, ProductVariants, and initializes 1:1 `InventoryBalance` records.
+   * If a product variant already exists with matching price, it is skipped (`SKIPPED`).
+   * If an existing variant has a conflicting price, it is skipped and flagged as a conflict (`SKIPPED_CONFLICT`) without modifying the database.
+3. **`UPDATE`**:
+   * Same as `CREATE_ONLY` for new items.
+   * For existing items with conflicting prices, updates only approved catalog fields (`mrpInclTax`). Never overrides manual purchase costs, tax rates, or active status.
+
+### 10.3 Finolex Workbook Mapping & Invariant Guarantees
+* **Source**: `Finolex_Combined_Price_List_Billing.xlsx` (1,809 data rows, sheet `'Price List'`).
+* **Category Breakdown**:
+  * `ASTM White`: 477 rows
+  * `SWR & Drainage`: 456 rows
+  * `Agri`: 430 rows
+  * `CPVC`: 386 rows
+  * `Column Pipe`: 60 rows
+* **Entity Hierarchy Resolution**:
+  * Brand: `Finolex` (auto-created if absent).
+  * Category: Mapped from `Price List` column.
+  * Subcategory: Mapped from `Sub Category` column.
+  * Product: Mapped from `Product Name` column.
+  * Product Variant: Mapped from `Size` column (`sizeLabel`).
+* **Deterministic SKU Generation**:
+  * Format: `FIN-{PRODUCT_SLUG}-{SIZE_SLUG}-{MD5_HASH}` (e.g., `FIN-AGRI-CASING-DEEP-4-INCH-B3A1C9`). Guaranteed deterministic across repeated runs and bounded under 100 characters.
+* **Pricing & Unknown Field Policy**:
+  * `mrpInclTax`: Read from `Price (INR)` column.
+  * `pricingMethod`: `MRP_DISCOUNT`.
+  * `purchaseCostExclTax`: `null` (no cost data provided in price list; never guessed or fabricated).
+  * `taxRatePct`: `null` (GST rate not provided; never assumed).
+* **Inventory Initialization Invariant**:
+  * For every newly created `ProductVariant`, exactly one `InventoryBalance` is created with `quantityOnHand = 0`, `openingConfirmed = false`, and `version = 0`.
+  * **Zero stock movements (`stock_movement`) or financial ledger entries are created**. Stock can only be added through verified purchases (`BE04B`) or deliberate manual adjustments with physical verification (`BE04A`).
+
+### 10.4 CLI Runner & Safety Guards
+* **Execution**: Implemented as Spring `CommandLineRunner` in `ProductImportRunner`.
+* **Disabled by Default**: Guarded by `@ConditionalOnProperty(name = "app.import.enabled", havingValue = "true", matchIfMissing = false)`.
+* **CLI Properties**:
+  * `app.import.file-path`: Absolute or relative path to the Excel workbook.
+  * `app.import.mode`: `DRY_RUN` (default), `CREATE_ONLY`, or `UPDATE`.
+  * `app.import.sheet-name`: Target sheet (default: `'Price List'`).
+
+### 10.5 End-to-End Acceptance Integration Verification
+* Verified by `EndToEndBackendAcceptanceTest` covering all modules in a single complete lifecycle:
+  * **Step A**: Foundation, shop settings, and user authentication.
+  * **Step B**: Controlled catalog import and zero-stock balance initialization.
+  * **Step C**: Customer, site, and supplier master management.
+  * **Step D**: Supplier inward purchase, atomic stock receipt, and payment allocation.
+  * **Step E**: Supplier partial purchase return, stock reduction, and credit release.
+  * **Step F**: Direct POS customer sales billing, atomic stock deduction, and partial payment.
+  * **Step G**: Customer bill revision, stock delta adjustments, and dues recalculation.
+  * **Step H**: Customer return, returnable limit checks, stock restoration, and credit note.
+  * **Step I**: Customer advance refund disbursed from unallocated credit.
+  * **Step J**: Operational expense registration and soft bookkeeping reversal.
+  * **Step K**: Executive dashboard KPIs and Owner-only profitability reporting.
+  * **Step L**: Server-side printable PDF generation across all 12 business documents.
+  * **Step M**: High-concurrency pessimistic locking verification ensuring zero deadlocks and zero negative stock.

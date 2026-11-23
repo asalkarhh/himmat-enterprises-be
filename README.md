@@ -70,10 +70,17 @@ A resilient, transaction-safe backend modular monolith for Himmat Enterprises (p
   * Strict Owner-only profit metrics (`GET /api/v1/reports/profit` and `GET /api/v1/reports/profit/products`) using immutable transaction line cost snapshots (`purchaseCostExclTax`), segregating unknown-cost items into coverage tracking, and returning 403 Forbidden for Manager.
   * Comprehensive business reports: Sales report (with `ACTIVITY` vs `DOCUMENT` basis), Purchase report, Inventory valuation report, and Cash movement report.
   * Server-side OpenPDF document rendering for 12 business documents: Normal/GST invoices, revisions, receipts, credit notes, refunds, customer ledger statements, purchase orders, debit notes, payment advice, supplier ledger statements, and expense vouchers.
+* **BE08: Product Catalog Import & End-to-End Acceptance Integration** (Complete)
+  * Controlled backend-only catalog import for supplier price lists (e.g., `Finolex_Combined_Price_List_Billing.xlsx` with 1,809 variants).
+  * Safe multi-mode execution (`DRY_RUN`, `CREATE_ONLY`, `UPDATE`) with deterministic SKU generation (`FIN-{PRODUCT_SLUG}-{SIZE_SLUG}-{MD5_HASH}`).
+  * Durable audit tracking via `catalog_import_run` and `catalog_import_row` (`V9__product_import_tracking.sql`).
+  * 1:1 `InventoryBalance` initialization to zero (`openingConfirmed = false`) with zero fabricated stock movements or financial entries.
+  * Developer CLI runner (`ProductImportRunner`), disabled by default on normal application startup (`app.import.enabled = false`).
+  * Comprehensive end-to-end acceptance integration suite (`EndToEndBackendAcceptanceTest`) verifying BE01 through BE08 lifecycles, stock conservation, ledger integrity, document rendering, and concurrent isolation.
 
 ---
 
-## 2. API Endpoints (BE04A & BE04B)
+## 2. API Endpoints
 
 ### Inventory & Adjustments (BE04A)
 | Method | Path | Description | Access |
@@ -164,21 +171,55 @@ A resilient, transaction-safe backend modular monolith for Himmat Enterprises (p
 ### Printable PDF Documents (BE07)
 | Method | Path | Description | Access |
 |---|---|---|---|
-| `GET` | `/api/v1/documents/invoices/{id}/pdf` | Generate printable sales invoice PDF (Normal or GST format) | Owner, Manager |
-| `GET` | `/api/v1/documents/invoices/{id}/revisions/{revId}/pdf` | Generate invoice revision statement PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/customer-receipts/{id}/pdf` | Generate customer payment receipt voucher PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/customer-returns/{id}/pdf` | Generate customer credit note / return voucher PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/customer-refunds/{id}/pdf` | Generate customer refund disbursement voucher PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/customers/{id}/ledger/pdf` | Generate customer statement of accounts PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/purchases/{id}/pdf` | Generate purchase order / inward invoice record PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/purchase-returns/{id}/pdf` | Generate supplier debit note / purchase return voucher PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/supplier-payments/{id}/pdf` | Generate supplier payment advice voucher PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/suppliers/{id}/ledger/pdf` | Generate supplier statement of accounts PDF | Owner, Manager |
-| `GET` | `/api/v1/documents/expenses/{id}/pdf` | Generate operational expense voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/invoices/{id}/pdf` | Generate printable sales invoice PDF (Normal or GST format) | Owner, Manager |
+| `GET` | `/api/v1/invoices/{id}/revisions/{revId}/pdf` | Generate invoice revision statement PDF | Owner, Manager |
+| `GET` | `/api/v1/customer-receipts/{id}/pdf` | Generate customer payment receipt voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/customer-returns/{id}/pdf` | Generate customer credit note / return voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/customer-refunds/{id}/pdf` | Generate customer refund disbursement voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/customers/{id}/ledger/pdf` | Generate customer statement of accounts PDF | Owner, Manager |
+| `GET` | `/api/v1/purchases/{id}/pdf` | Generate purchase order / inward invoice record PDF | Owner, Manager |
+| `GET` | `/api/v1/purchases/returns/{id}/pdf` | Generate supplier debit note / purchase return voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/supplier-payments/{id}/pdf` | Generate supplier payment advice voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/supplier-refunds/{id}/pdf` | Generate supplier refund receipt voucher PDF | Owner, Manager |
+| `GET` | `/api/v1/suppliers/{id}/ledger/pdf` | Generate supplier statement of accounts PDF | Owner, Manager |
+| `GET` | `/api/v1/expenses/{id}/pdf` | Generate operational expense voucher PDF | Owner, Manager |
 
 ---
 
-## 3. Getting Started
+## 3. Product Catalog Import (CLI Runner - BE08)
+
+The product catalog import tool loads bulk price list workbooks (e.g., `Finolex_Combined_Price_List_Billing.xlsx`) into the catalog hierarchy with zero fabricated stock.
+
+The runner is a developer tool and is **disabled by default** during normal application startup.
+
+### Configuration Properties
+| Property | Default | Description |
+|---|---|---|
+| `app.import.enabled` | `false` | Enable/disable the import runner |
+| `app.import.file-path` | `""` | Path to the Excel workbook (`.xlsx`) |
+| `app.import.mode` | `DRY_RUN` | Import mode: `DRY_RUN`, `CREATE_ONLY`, or `UPDATE` |
+| `app.import.sheet-name` | `Price List` | Name of the worksheet to process |
+
+### Usage Examples
+
+**1. Dry Run (Validate without writing to database):**
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.import.enabled=true --app.import.file-path=data/Finolex_Combined_Price_List_Billing.xlsx --app.import.mode=DRY_RUN"
+```
+
+**2. Create Only (Insert new items, report existing conflicts without mutating):**
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.import.enabled=true --app.import.file-path=data/Finolex_Combined_Price_List_Billing.xlsx --app.import.mode=CREATE_ONLY"
+```
+
+**3. Update (Insert new items, update approved fields e.g. MRP for existing):**
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.import.enabled=true --app.import.file-path=data/Finolex_Combined_Price_List_Billing.xlsx --app.import.mode=UPDATE"
+```
+
+---
+
+## 4. Getting Started
 
 ### Prerequisites
 * Java 21 LTS

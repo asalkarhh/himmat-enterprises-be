@@ -18,6 +18,9 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     Optional<ProductVariant> findBySku(String sku);
 
+    @Query("SELECT v FROM ProductVariant v WHERE v.product.id = :productId AND LOWER(TRIM(v.sizeLabel)) = LOWER(TRIM(:sizeLabel))")
+    Optional<ProductVariant> findByProductIdAndSizeLabelIgnoreCase(@Param("productId") Long productId, @Param("sizeLabel") String sizeLabel);
+
     boolean existsBySku(String sku);
 
     boolean existsBySkuAndIdNot(String sku, Long id);
