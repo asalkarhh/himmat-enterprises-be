@@ -143,9 +143,7 @@ public class CustomerReceiptService {
                     throw new AppException("INVALID_INVOICE_STATUS", "Cannot allocate receipt to non-posted invoice", HttpStatus.UNPROCESSABLE_ENTITY);
                 }
 
-                BigDecimal outstanding = invoice.getTotalPayableAmount().subtract(
-                        invoice.getTotalAllocatedAmount() != null ? invoice.getTotalAllocatedAmount() : BigDecimal.ZERO
-                );
+                BigDecimal outstanding = invoice.getOutstandingAmount();
 
                 if (allocReq.getAmount().compareTo(outstanding) > 0) {
                     throw new AppException("EXCESS_ALLOCATION",
@@ -157,7 +155,7 @@ public class CustomerReceiptService {
                 BigDecimal newAllocated = invoice.getTotalAllocatedAmount().add(allocReq.getAmount());
                 invoice.setTotalAllocatedAmount(MoneyPolicy.roundMoney(newAllocated));
 
-                if (invoice.getTotalAllocatedAmount().compareTo(invoice.getTotalPayableAmount()) >= 0) {
+                if (invoice.getTotalAllocatedAmount().compareTo(invoice.getEffectivePayableAmount()) >= 0) {
                     invoice.setSettlementStatus(SettlementStatus.PAID);
                 } else if (invoice.getTotalAllocatedAmount().compareTo(BigDecimal.ZERO) > 0) {
                     invoice.setSettlementStatus(SettlementStatus.PARTIALLY_PAID);

@@ -92,7 +92,7 @@ public class SupplierLedgerService {
         // Sum outstanding payable from purchases
         List<Purchase> unpaidPurchases = purchaseRepository.findUnpaidPurchasesBySupplier(supplierId);
         BigDecimal outstandingPayable = unpaidPurchases.stream()
-                .map(p -> p.getTotalPayableAmount().subtract(p.getTotalAllocatedAmount()))
+                .map(Purchase::getOutstandingAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return SupplierAccountSummaryDto.builder()

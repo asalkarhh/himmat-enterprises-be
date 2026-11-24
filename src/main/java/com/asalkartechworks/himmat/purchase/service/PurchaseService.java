@@ -315,9 +315,7 @@ public class PurchaseService {
     }
 
     public PurchaseResponseDto toDto(Purchase purchase) {
-        BigDecimal outstanding = purchase.getTotalPayableAmount().subtract(
-                purchase.getTotalAllocatedAmount() != null ? purchase.getTotalAllocatedAmount() : BigDecimal.ZERO
-        );
+        BigDecimal outstanding = purchase.getOutstandingAmount();
 
         List<PurchaseLineResponseDto> lineDtos = purchase.getLines().stream()
                 .map(l -> PurchaseLineResponseDto.builder()

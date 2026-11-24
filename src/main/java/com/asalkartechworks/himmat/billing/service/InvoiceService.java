@@ -430,11 +430,7 @@ public class InvoiceService {
 
     public InvoiceResponseDto toDto(SalesInvoice invoice) {
         LocalDate today = businessClock.today();
-        BigDecimal outstanding = MoneyPolicy.roundMoney(
-                invoice.getTotalPayableAmount().subtract(
-                        invoice.getTotalAllocatedAmount() != null ? invoice.getTotalAllocatedAmount() : BigDecimal.ZERO
-                )
-        );
+        BigDecimal outstanding = MoneyPolicy.roundMoney(invoice.getOutstandingAmount());
 
         boolean isOverdue = invoice.getStatus() == InvoiceStatus.POSTED &&
                 outstanding.compareTo(BigDecimal.ZERO) > 0 &&

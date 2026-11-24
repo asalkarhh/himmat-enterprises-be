@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface PurchaseReturnLineRepository extends JpaRepository<PurchaseReturnLine, Long> {
     List<PurchaseReturnLine> findByPurchaseReturnId(Long purchaseReturnId);
+    List<PurchaseReturnLine> findByPurchaseLineId(Long purchaseLineId);
 }

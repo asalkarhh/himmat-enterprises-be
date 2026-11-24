@@ -27,6 +27,7 @@ import com.asalkartechworks.himmat.purchase.model.SupplierPayment;
 import com.asalkartechworks.himmat.purchase.repository.PaymentAllocationRepository;
 import com.asalkartechworks.himmat.purchase.repository.PurchaseLineRepository;
 import com.asalkartechworks.himmat.purchase.repository.PurchaseRepository;
+import com.asalkartechworks.himmat.purchase.repository.PurchaseReturnLineRepository;
 import com.asalkartechworks.himmat.purchase.repository.PurchaseReturnRepository;
 import com.asalkartechworks.himmat.purchase.repository.SupplierPaymentRepository;
 import com.asalkartechworks.himmat.shared.idempotency.model.BusinessEvent;
@@ -56,6 +57,7 @@ public class PurchaseReturnService {
     private final PurchaseRepository purchaseRepository;
     private final PurchaseLineRepository purchaseLineRepository;
     private final PurchaseReturnRepository purchaseReturnRepository;
+    private final PurchaseReturnLineRepository purchaseReturnLineRepository;
     private final SupplierRepository supplierRepository;
     private final SupplierPaymentRepository supplierPaymentRepository;
     private final PaymentAllocationRepository paymentAllocationRepository;
@@ -126,7 +128,21 @@ public class PurchaseReturnService {
             purchaseLineRepository.save(pLine);
 
             BigDecimal unitCost = pLine.getGrossUnitCost();
-            BigDecimal lineAmount = MoneyPolicy.roundMoney(unitCost.multiply(BigDecimal.valueOf(lineReq.getQuantity())));
+            BigDecimal lineAmount;
+            if (lineReq.getQuantity() == remainingReturnable) {
+                List<PurchaseReturnLine> prevReturnLines = purchaseReturnLineRepository.findByPurchaseLineId(pLine.getId());
+                BigDecimal previouslyReturned = prevReturnLines.stream()
+                        .map(PurchaseReturnLine::getTotalAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal remainingLineAmount = pLine.getLineTotal().subtract(previouslyReturned);
+                if (remainingLineAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    lineAmount = remainingLineAmount;
+                } else {
+                    lineAmount = MoneyPolicy.roundMoney(unitCost.multiply(BigDecimal.valueOf(lineReq.getQuantity())));
+                }
+            } else {
+                lineAmount = MoneyPolicy.roundMoney(unitCost.multiply(BigDecimal.valueOf(lineReq.getQuantity())));
+            }
             totalReturnAmount = totalReturnAmount.add(lineAmount);
 
             ProductVariant variant = pLine.getVariant();

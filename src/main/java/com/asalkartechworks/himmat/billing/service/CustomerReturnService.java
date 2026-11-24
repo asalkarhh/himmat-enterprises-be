@@ -104,7 +104,21 @@ public class CustomerReturnService {
             }
 
             ValuationResult valuation = resolveValuation(line, request.getValuationPolicy(), reqLine.getValuationBasis());
-            BigDecimal lineAmount = MoneyPolicy.roundMoney(valuation.unitPrice.multiply(BigDecimal.valueOf(reqLine.getQuantity())));
+            BigDecimal lineAmount;
+            if (reqLine.getQuantity() == remaining && valuation.unitPrice.compareTo(line.getUnitNetPrice()) == 0) {
+                List<CustomerReturnLine> prevReturnLines = customerReturnLineRepository.findByInvoiceLineId(line.getId());
+                BigDecimal previouslyReturned = prevReturnLines.stream()
+                        .map(CustomerReturnLine::getTotalAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal remainingLineAmount = line.getLineTotal().subtract(previouslyReturned);
+                if (remainingLineAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    lineAmount = remainingLineAmount;
+                } else {
+                    lineAmount = MoneyPolicy.roundMoney(valuation.unitPrice.multiply(BigDecimal.valueOf(reqLine.getQuantity())));
+                }
+            } else {
+                lineAmount = MoneyPolicy.roundMoney(valuation.unitPrice.multiply(BigDecimal.valueOf(reqLine.getQuantity())));
+            }
             runningReturnTotal = runningReturnTotal.add(lineAmount);
 
             BigDecimal taxable = null;
@@ -227,7 +241,21 @@ public class CustomerReturnService {
             salesInvoiceLineRepository.save(line);
 
             ValuationResult valuation = resolveValuation(line, request.getValuationPolicy(), lineReq.getValuationBasis());
-            BigDecimal lineAmount = MoneyPolicy.roundMoney(valuation.unitPrice.multiply(BigDecimal.valueOf(lineReq.getQuantity())));
+            BigDecimal lineAmount;
+            if (lineReq.getQuantity() == remaining && valuation.unitPrice.compareTo(line.getUnitNetPrice()) == 0) {
+                List<CustomerReturnLine> prevReturnLines = customerReturnLineRepository.findByInvoiceLineId(line.getId());
+                BigDecimal previouslyReturned = prevReturnLines.stream()
+                        .map(CustomerReturnLine::getTotalAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal remainingLineAmount = line.getLineTotal().subtract(previouslyReturned);
+                if (remainingLineAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    lineAmount = remainingLineAmount;
+                } else {
+                    lineAmount = MoneyPolicy.roundMoney(valuation.unitPrice.multiply(BigDecimal.valueOf(lineReq.getQuantity())));
+                }
+            } else {
+                lineAmount = MoneyPolicy.roundMoney(valuation.unitPrice.multiply(BigDecimal.valueOf(lineReq.getQuantity())));
+            }
             totalReturnAmount = totalReturnAmount.add(lineAmount);
 
             BigDecimal taxable = null;

@@ -118,4 +118,27 @@ public class Purchase {
         lines.add(line);
         line.setPurchase(this);
     }
+
+    public BigDecimal getTotalReturnedAmount() {
+        if (lines == null || lines.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return lines.stream()
+                .map(l -> {
+                    BigDecimal unitCost = l.getGrossUnitCost() != null ? l.getGrossUnitCost() : BigDecimal.ZERO;
+                    int retQty = l.getReturnedQuantity() != null ? l.getReturnedQuantity() : 0;
+                    return unitCost.multiply(BigDecimal.valueOf(retQty)).setScale(2, java.math.RoundingMode.HALF_UP);
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public BigDecimal getEffectivePayableAmount() {
+        BigDecimal total = totalPayableAmount != null ? totalPayableAmount : BigDecimal.ZERO;
+        return total.subtract(getTotalReturnedAmount()).max(BigDecimal.ZERO);
+    }
+
+    public BigDecimal getOutstandingAmount() {
+        BigDecimal allocated = totalAllocatedAmount != null ? totalAllocatedAmount : BigDecimal.ZERO;
+        return getEffectivePayableAmount().subtract(allocated).max(BigDecimal.ZERO);
+    }
 }

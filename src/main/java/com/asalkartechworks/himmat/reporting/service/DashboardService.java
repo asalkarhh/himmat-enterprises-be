@@ -164,7 +164,7 @@ public class DashboardService {
         Set<Long> suppliersWithPayables = new HashSet<>();
         for (Purchase p : allUnpaidPurchases) {
             if (p.getStatus() == PurchaseStatus.POSTED) {
-                BigDecimal unpaid = p.getTotalPayableAmount().subtract(p.getTotalAllocatedAmount());
+                BigDecimal unpaid = p.getOutstandingAmount();
                 if (unpaid.compareTo(BigDecimal.ZERO) > 0) {
                     totalSupplierOutstanding = totalSupplierOutstanding.add(unpaid);
                     suppliersWithPayables.add(p.getSupplier().getId());

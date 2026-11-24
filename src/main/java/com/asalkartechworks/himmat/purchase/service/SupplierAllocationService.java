@@ -94,9 +94,7 @@ public class SupplierAllocationService {
                 throw new AppException("INVALID_PURCHASE_STATUS", "Cannot allocate payment to non-posted purchase", HttpStatus.UNPROCESSABLE_ENTITY);
             }
 
-            BigDecimal outstanding = purchase.getTotalPayableAmount().subtract(
-                    purchase.getTotalAllocatedAmount() != null ? purchase.getTotalAllocatedAmount() : BigDecimal.ZERO
-            );
+            BigDecimal outstanding = purchase.getOutstandingAmount();
 
             if (item.getAmount().compareTo(outstanding) > 0) {
                 throw new AppException("EXCESS_ALLOCATION",
